@@ -1,4 +1,4 @@
-# silver_accounts_load.py - Script para poblar la tabla silver.accounts
+# load_silver_accounts.py - Script para poblar la tabla silver.accounts
 import os
 import psycopg2
 from psycopg2.extras import execute_values
