@@ -45,3 +45,42 @@ CREATE INDEX idx_holded_accounts_group ON bronze.holded_accounts(group);
 
 -- Add table comment
 COMMENT ON TABLE bronze.holded_accounts IS 'Chart of accounts data from Holded API in Bronze layer';
+
+-- Drop table if it exists and recreate it
+DROP TABLE IF EXISTS bronze.holded_dailyledger;
+
+-- Create the Bronze table for Holded daily ledger data
+CREATE TABLE bronze.holded_dailyledger (
+    -- Original fields from Holded API
+    entryNumber INTEGER,         -- Entry number in the ledger
+    line INTEGER,                -- Line number within the entry
+    timestamp BIGINT,            -- Unix timestamp of the entry
+    type VARCHAR(50),            -- Type of entry
+    description VARCHAR(255),    -- Entry description
+    docDescription VARCHAR(255), -- Document description
+    account BIGINT,              -- Account number
+    debit NUMERIC(15, 2),        -- Debit amount
+    credit NUMERIC(15, 2),       -- Credit amount
+    tags JSONB,                  -- Tags associated with the entry (array in JSON)
+    checked VARCHAR(3),          -- Check status (e.g., "Yes")
+    
+    -- Technical metadata columns with dwh_ prefix
+    dwh_source_system VARCHAR(50) DEFAULT 'holded',
+    dwh_source_entity VARCHAR(50) DEFAULT 'dailyledger',
+    dwh_insert_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dwh_update_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    dwh_batch_id VARCHAR(50),
+    dwh_process_id VARCHAR(50),
+    dwh_page_number INTEGER      -- To track pagination from the API
+);
+
+-- Create a composite primary key
+ALTER TABLE bronze.holded_dailyledger ADD CONSTRAINT pk_holded_dailyledger PRIMARY KEY (entryNumber, line);
+
+-- Create indexes for common query patterns
+CREATE INDEX idx_holded_dailyledger_timestamp ON bronze.holded_dailyledger(timestamp);
+CREATE INDEX idx_holded_dailyledger_account ON bronze.holded_dailyledger(account);
+CREATE INDEX idx_holded_dailyledger_type ON bronze.holded_dailyledger(type);
+
+-- Add table comment
+COMMENT ON TABLE bronze.holded_dailyledger IS 'Daily ledger entries from Holded API in Bronze layer';
