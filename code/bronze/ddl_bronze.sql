@@ -75,7 +75,7 @@ CREATE TABLE bronze.holded_dailyledger (
 );
 
 -- Create a composite primary key
-ALTER TABLE bronze.holded_dailyledger ADD CONSTRAINT pk_holded_dailyledger PRIMARY KEY (entryNumber, line);
+ALTER TABLE bronze.holded_dailyledger ADD CONSTRAINT pk_holded_dailyledger PRIMARY KEY (entryNumber, line, timestamp);
 
 -- Create indexes for common query patterns
 CREATE INDEX idx_holded_dailyledger_timestamp ON bronze.holded_dailyledger(timestamp);
