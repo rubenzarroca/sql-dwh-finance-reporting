@@ -894,7 +894,7 @@ def load_journal_lines(conn, full_refresh=True):
             # Determinar estado de reconciliación
             is_reconciled = row['checked'] == 'Yes' if row['checked'] else False
             
-            # Parsear tags JSONB
+        # Parsear tags JSONB
             tags = row['tags']
             if tags:
                 try:
@@ -915,11 +915,10 @@ def load_journal_lines(conn, full_refresh=True):
                     # ...
                     
                 except (json.JSONDecodeError, TypeError) as e:
-                    logger.except (json.JSONDecodeError, TypeError) as e:
-                   logger.warning(f"Error al parsear tags para asiento {row['entrynumber']} línea {row['line']}: {e}")
-                   tags_data = {}
-           else:
-               tags_data = {}
+                    logger.warning(f"Error al parsear tags para asiento {row['entrynumber']} línea {row['line']}: {e}")
+                    tags_data = {}
+            else:
+                tags_data = {}
            
            # Crear línea para inserción
            line = (
