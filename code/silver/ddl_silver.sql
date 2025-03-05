@@ -29,8 +29,8 @@ CREATE TABLE silver.accounts (
     account_group VARCHAR(100) NOT NULL,            -- Account group/category
     
     -- Classification fields
-    account_type VARCHAR(50) NOT NULL,              -- Asset, Liability, Equity, Income, Expense
-    account_subtype VARCHAR(50),                    -- More detailed classification
+    account_type VARCHAR(100) NOT NULL,              -- Asset, Liability, Equity, Income, Expense
+    account_subtype VARCHAR(200),                    -- More detailed classification
     is_analytic BOOLEAN DEFAULT TRUE,               -- All 8-digit accounts are considered analytic
     
     -- Hierarchy fields
@@ -54,8 +54,8 @@ CREATE TABLE silver.accounts (
     -- Technical metadata
     dwh_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     dwh_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    dwh_source_table VARCHAR(100) DEFAULT 'bronze.holded_accounts',
-    dwh_batch_id VARCHAR(50),
+    dwh_source_table VARCHAR(200) DEFAULT 'bronze.holded_accounts',
+    dwh_batch_id VARCHAR(100),
     
     -- Constraints
     CONSTRAINT pk_silver_accounts PRIMARY KEY (account_id),
