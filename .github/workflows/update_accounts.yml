@@ -33,4 +33,4 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
           HOLDED_API_KEY: ${{ secrets.HOLDED_API_KEY }}
-        run: python holded_chart_accounts_update.py
+        run: python code/bronze/holded_chart_accounts_update.py
