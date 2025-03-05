@@ -1,0 +1,36 @@
+name: Update Holded Chart of Accounts
+
+on:
+  schedule:
+    # Ejecutar a las 9:00 AM todos los días (UTC time)
+    - cron: '0 9 * * *'
+  
+  # También permitir ejecución manual
+  workflow_dispatch:
+
+jobs:
+  update-accounts:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas psycopg2-binary numpy
+      
+      - name: Run update script
+        env:
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          HOLDED_API_KEY: ${{ secrets.HOLDED_API_KEY }}
+        run: python holded_chart_accounts_update.py
