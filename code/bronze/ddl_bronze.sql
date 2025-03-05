@@ -52,12 +52,12 @@ DROP TABLE IF EXISTS bronze.holded_dailyledger;
 -- Create the Bronze table for Holded daily ledger data
 CREATE TABLE bronze.holded_dailyledger (
     -- Original fields from Holded API
-    entryNumber INTEGER,         -- Entry number in the ledger
+    entrynumber INTEGER,         -- Entry number in the ledger
     line INTEGER,                -- Line number within the entry
     timestamp BIGINT,            -- Unix timestamp of the entry
     type VARCHAR(50),            -- Type of entry
-    description VARCHAR(255),    -- Entry description
-    docDescription VARCHAR(255), -- Document description
+    description TEXT,            -- Entry description
+    docdescription TEXT,         -- Document description
     account BIGINT,              -- Account number
     debit NUMERIC(15, 2),        -- Debit amount
     credit NUMERIC(15, 2),       -- Credit amount
