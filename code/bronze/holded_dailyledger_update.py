@@ -57,8 +57,8 @@ def fetch_holded_dailyledger(from_date, to_date):
     
     url = "https://api.holded.com/api/accounting/v1/dailyledger"
     params = {
-        "fromDate": from_timestamp,
-        "toDate": to_timestamp
+        "starttmp": from_timestamp,
+        "endtmp": to_timestamp
     }
     
     print(f"Consultando API de Holded: {url}")
