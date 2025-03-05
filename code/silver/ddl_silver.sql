@@ -4,13 +4,13 @@ DDL Script: Create Silver Tables for Financial Data Warehouse
 ===============================================================================
 Script Purpose:
     This script creates tables in the 'silver' schema that transform and normalize
-    data from the Bronze layer, applying business rules and enrichment.
+    account data from the Bronze layer, applying classifications based on the
+    Spanish General Accounting Plan (PGC).
     
     Main transformations:
-    - Normalize account structures
-    - Create standardized journal entries
-    - Apply business rules for financial analysis
-    - Prepare data for dimensional modeling in Gold layer
+    - Classify accounts by type (Asset, Liability, Equity, Income, Expense)
+    - Establish account hierarchy for multi-level analysis
+    - Enrich with business metadata for financial reporting
 ===============================================================================
 */
 
