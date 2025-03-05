@@ -22,7 +22,7 @@ CREATE TABLE bronze.holded_accounts (
     color VARCHAR(7),            -- Hex color code (e.g., "#64DB46")
     num BIGINT,                  -- Account number
     name VARCHAR(255),           -- Account name
-    group VARCHAR(255),          -- Account group/category
+    "group" VARCHAR(255),        -- Account group/category
     debit NUMERIC(15, 2),        -- Debit amount
     credit NUMERIC(15, 2),       -- Credit amount
     balance NUMERIC(15, 2),      -- Account balance
@@ -41,7 +41,7 @@ ALTER TABLE bronze.holded_accounts ADD CONSTRAINT pk_holded_accounts PRIMARY KEY
 
 -- Create indexes for common query patterns
 CREATE INDEX idx_holded_accounts_num ON bronze.holded_accounts(num);
-CREATE INDEX idx_holded_accounts_group ON bronze.holded_accounts(group);
+CREATE INDEX idx_holded_accounts_group ON bronze.holded_accounts("group");
 
 -- Add table comment
 COMMENT ON TABLE bronze.holded_accounts IS 'Chart of accounts data from Holded API in Bronze layer';
