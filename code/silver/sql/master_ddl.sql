@@ -32,8 +32,8 @@ Purpose:
 \echo 'Creating silver.account_balances table...'
 \i '05_account_balances.sql'
 
-\echo 'Creating silver layer views...'
-\i '06_views.sql'
+\echo 'Creating silver layer financial statement views...'
+\i '06_views_financial_statements.sql'
 
 -- Record execution end
 \echo 'Silver layer DDL deployment completed successfully'
