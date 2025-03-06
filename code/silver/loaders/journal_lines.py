@@ -39,52 +39,49 @@ def extract_bronze_journal_lines(conn) -> pd.DataFrame:
         SELECT 
             dl.entrynumber,
             dl.line,
+            dl.timestamp,  -- Incluimos el timestamp para identificación única
             je.entry_id,
             dl.account,
             dl.debit,
             dl.credit,
             dl.description,
-            dl.tags,
+            dl.tags::text as tags,  -- Forzar conversión a texto para consistencia
             dl.checked,
             dl.dwh_update_timestamp
         FROM bronze.holded_dailyledger dl
         JOIN silver.journal_entries je ON dl.entrynumber = je.entry_number
-        ORDER BY dl.entrynumber, dl.line
+            AND dl.timestamp = je.original_timestamp  -- Aseguramos la unión correcta
+        ORDER BY dl.entrynumber, dl.timestamp, dl.line
         """
         
         logger.info("Extracting journal lines from bronze.holded_dailyledger")
         
-        # Use cursor instead of direct pandas read_sql to avoid warnings
         cursor = conn.cursor()
         cursor.execute(query)
-        
-        # Get column names from cursor description
         columns = [desc[0] for desc in cursor.description]
-        
-        # Fetch all results
         results = cursor.fetchall()
         cursor.close()
         
-        # Create DataFrame from results
         df = pd.DataFrame(results, columns=columns)
+        
+        # Examinar el formato de tags para diagnóstico
+        sample_tags = df['tags'].head(5).tolist()
+        logger.info(f"Sample tags format: {sample_tags}")
         
         logger.info(f"Extracted {len(df)} journal lines from bronze layer")
         
-        # Check for duplicates in the source data
-        duplicate_check = df.duplicated(subset=['entrynumber', 'line'])
+        # Verificamos duplicados considerando la clave completa
+        duplicate_check = df.duplicated(subset=['entrynumber', 'line', 'timestamp'])
         if duplicate_check.any():
-            logger.warning(f"Found {duplicate_check.sum()} duplicate rows in source data!")
+            logger.warning(f"Found {duplicate_check.sum()} duplicate rows with identical (entrynumber, line, timestamp)")
+            # Estas sí serían duplicados verdaderos ya que violan la clave primaria
             
-            # Identify the duplicates for logging
-            duplicates = df[df.duplicated(subset=['entrynumber', 'line'], keep=False)]
-            duplicate_groups = duplicates.groupby(['entrynumber', 'line'])
+            duplicates = df[df.duplicated(subset=['entrynumber', 'line', 'timestamp'], keep=False)]
+            logger.warning(f"Detailed info about true duplicates: {duplicates.shape[0]} rows")
             
-            for (entry_num, line_num), group in duplicate_groups:
-                logger.warning(f"Duplicate found: entrynumber={entry_num}, line={line_num}, {len(group)} occurrences")
-            
-            logger.warning("Removing duplicates before processing")
-            df = df.drop_duplicates(subset=['entrynumber', 'line'])
-            logger.info(f"After removing duplicates: {len(df)} journal lines")
+            # En este caso, mantener solo una de las filas es correcto
+            df = df.drop_duplicates(subset=['entrynumber', 'line', 'timestamp'])
+            logger.info(f"After removing true duplicates: {len(df)} journal lines")
         
         return df
     
@@ -156,51 +153,74 @@ def is_tax_relevant(account_number: int) -> bool:
     
     return False
 
-def extract_business_metadata_from_tags(tags) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+def extract_tags_as_list(tags) -> List[str]:
     """
-    Extract business metadata from the tags JSON field.
+    Extract tags from JSON or string format to a list of strings.
     
     Args:
-        tags: JSON tags from the journal line
+        tags: Tags in JSON or string format
         
     Returns:
-        Tuple of (cost_center, business_line, customer_id, vendor_id, project_id)
+        List of tag strings
     """
-    # Default values
-    cost_center = None
-    business_line = None
-    customer_id = None
-    vendor_id = None
-    project_id = None
+    # Default empty list
+    tags_list = []
     
     # Process tags if they exist
     if tags and tags != "null":
         try:
             # Parse tags from JSON if it's a string
             if isinstance(tags, str):
-                tags_data = json.loads(tags)
-            else:
-                tags_data = tags
-            
-            # For now, just a placeholder for future business logic
-            # This would be customized based on your specific tag structure
-            
-            # Example tag processing logic:
-            if isinstance(tags_data, list):
-                for tag in tags_data:
-                    if isinstance(tag, str):
-                        # Example: tags like "CC:Marketing" for cost center
-                        if tag.startswith("CC:"):
-                            cost_center = tag[3:]
-                        # Example: tags like "BL:Retail" for business line
-                        elif tag.startswith("BL:"):
-                            business_line = tag[3:]
-                        # Add more tag pattern recognition as needed
-            
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning(f"Error parsing tags: {e}")
+                # Try to handle various string formats
+                if tags.strip() == "":
+                    tags_list = []
+                elif tags.strip().lower() == "null":
+                    tags_list = []
+                else:
+                    try:
+                        parsed_tags = json.loads(tags)
+                        if isinstance(parsed_tags, list):
+                            tags_list = [str(tag).strip() for tag in parsed_tags if tag]
+                    except json.JSONDecodeError:
+                        # If it fails, maybe it's already a stringified list
+                        logger.warning(f"Failed to parse tags as JSON: {tags}")
+                        # If it looks like a list but isn't valid JSON
+                        if tags.startswith('[') and tags.endswith(']'):
+                            # Basic extraction with string operations
+                            items = tags[1:-1].split(',')
+                            tags_list = [item.strip(' "\'') for item in items if item.strip()]
+            elif isinstance(tags, list):
+                tags_list = [str(tag).strip() for tag in tags if tag]
+        except Exception as e:
+            logger.warning(f"Error processing tags: {e}")
     
-    return cost_center, business_line, customer_id, vendor_id, project_id
+    return tags_list
+
+def extract_business_metadata_from_tags(tags) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract business metadata from the tags.
+    
+    Args:
+        tags: Tags in any format
+        
+    Returns:
+        Tuple of (cost_center, business_line)
+    """
+    # Default values
+    cost_center = None
+    business_line = None
+    
+    # Get tags as list
+    tags_list = extract_tags_as_list(tags)
+    
+    # Process tag list to extract business metadata
+    for tag in tags_list:
+        if tag.startswith("CC:"):
+            cost_center = tag[3:]
+        elif tag.startswith("BL:"):
+            business_line = tag[3:]
+    
+    return cost_center, business_line
 
 def transform_journal_lines(df: pd.DataFrame, account_map: Dict[int, str]) -> List[Tuple]:
     """
@@ -223,10 +243,10 @@ def transform_journal_lines(df: pd.DataFrame, account_map: Dict[int, str]) -> Li
     processed_keys = set()
     
     for _, row in df.iterrows():
-        # Check for duplicate entry_id and line_number combination
-        key = (row['entry_id'], row['line'])
+        # Check for duplicate unique key
+        key = (row['entry_id'], row['line'], row['timestamp'])
         if key in processed_keys:
-            logger.warning(f"Skipping duplicate key during transform: entry_id={row['entry_id']}, line={row['line']}")
+            logger.warning(f"Skipping duplicate key during transform: entry_id={row['entry_id']}, line={row['line']}, timestamp={row['timestamp']}")
             skipped_lines += 1
             continue
         
@@ -255,8 +275,24 @@ def transform_journal_lines(df: pd.DataFrame, account_map: Dict[int, str]) -> Li
         is_reconciled = row['checked'] == 'Yes' if row['checked'] else False
         is_checked = is_reconciled  # For now, use same value
         
+        # Extract individual tags
+        tags_list = extract_tags_as_list(row['tags'])
+        
+        # Get individual tags (up to 4)
+        tag1 = tags_list[0] if len(tags_list) > 0 else None
+        tag2 = tags_list[1] if len(tags_list) > 1 else None
+        tag3 = tags_list[2] if len(tags_list) > 2 else None
+        tag4 = tags_list[3] if len(tags_list) > 3 else None
+        
         # Process tags to extract business metadata
-        cost_center, business_line, customer_id, vendor_id, project_id = extract_business_metadata_from_tags(row['tags'])
+        cost_center, business_line = extract_business_metadata_from_tags(row['tags'])
+        
+        # Ensure tags is a valid JSON string for database storage
+        try:
+            tags_json = json.dumps(tags_list)
+        except Exception as e:
+            logger.warning(f"Error serializing tags to JSON: {e}")
+            tags_json = '[]'
         
         # Create data tuple for insertion
         line_data = (
@@ -267,16 +303,16 @@ def transform_journal_lines(df: pd.DataFrame, account_map: Dict[int, str]) -> Li
             row['debit'] or 0,         # debit_amount
             row['credit'] or 0,        # credit_amount
             row['description'],        # description
-            row['tags'],               # tags (keep as JSON)
-            is_reconciled,             # is_reconciled
+            tags_json,                 # tags (as JSON string)
+            tag1,                      # tag1
+            tag2,                      # tag2
+            tag3,                      # tag3
+            tag4,                      # tag4
             is_checked,                # is_checked
+            is_reconciled,             # is_reconciled
             tax_relevant,              # is_tax_relevant
-            None,                      # tax_code (not available in source data)
             cost_center,               # cost_center
             business_line,             # business_line
-            customer_id,               # customer_id
-            vendor_id,                 # vendor_id
-            project_id,                # project_id
             datetime.now(),            # dwh_created_at
             datetime.now(),            # dwh_updated_at
             'bronze.holded_dailyledger', # dwh_source_table
@@ -316,16 +352,17 @@ def load_journal_lines(conn, lines_data: List[Tuple], full_refresh: bool = False
             cursor.execute("TRUNCATE TABLE silver.journal_lines")
             conn.commit()
         
-        # Prepare insert query
+        # Prepare insert query with proper JSONB casting for tags
         if full_refresh:
             insert_query = """
             INSERT INTO silver.journal_lines (
                 entry_id, line_number, account_id, account_number,
                 debit_amount, credit_amount, description, tags,
-                is_reconciled, is_checked, is_tax_relevant, tax_code,
-                cost_center, business_line, customer_id, vendor_id, project_id,
+                tag1, tag2, tag3, tag4,
+                is_checked, is_reconciled, is_tax_relevant,
+                cost_center, business_line,
                 dwh_created_at, dwh_updated_at, dwh_source_table, dwh_batch_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
         else:
             # For incremental loads, use upsert pattern
@@ -333,10 +370,11 @@ def load_journal_lines(conn, lines_data: List[Tuple], full_refresh: bool = False
             INSERT INTO silver.journal_lines (
                 entry_id, line_number, account_id, account_number,
                 debit_amount, credit_amount, description, tags,
-                is_reconciled, is_checked, is_tax_relevant, tax_code,
-                cost_center, business_line, customer_id, vendor_id, project_id,
+                tag1, tag2, tag3, tag4,
+                is_checked, is_reconciled, is_tax_relevant,
+                cost_center, business_line,
                 dwh_created_at, dwh_updated_at, dwh_source_table, dwh_batch_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (entry_id, line_number) DO UPDATE SET
                 account_id = EXCLUDED.account_id,
                 account_number = EXCLUDED.account_number,
@@ -344,15 +382,15 @@ def load_journal_lines(conn, lines_data: List[Tuple], full_refresh: bool = False
                 credit_amount = EXCLUDED.credit_amount,
                 description = EXCLUDED.description,
                 tags = EXCLUDED.tags,
-                is_reconciled = EXCLUDED.is_reconciled,
+                tag1 = EXCLUDED.tag1,
+                tag2 = EXCLUDED.tag2,
+                tag3 = EXCLUDED.tag3,
+                tag4 = EXCLUDED.tag4,
                 is_checked = EXCLUDED.is_checked,
+                is_reconciled = EXCLUDED.is_reconciled,
                 is_tax_relevant = EXCLUDED.is_tax_relevant,
-                tax_code = EXCLUDED.tax_code,
                 cost_center = EXCLUDED.cost_center,
                 business_line = EXCLUDED.business_line,
-                customer_id = EXCLUDED.customer_id,
-                vendor_id = EXCLUDED.vendor_id,
-                project_id = EXCLUDED.project_id,
                 dwh_updated_at = CURRENT_TIMESTAMP,
                 dwh_batch_id = EXCLUDED.dwh_batch_id
             """
@@ -406,6 +444,23 @@ def load_journal_lines(conn, lines_data: List[Tuple], full_refresh: bool = False
         logger.info("Journal lines by account type:")
         for account_type, line_count, total_debit, total_credit in type_stats:
             logger.info(f"  {account_type}: {line_count} lines, {total_debit:.2f} debit, {total_credit:.2f} credit")
+        
+        # Generate statistics on tag usage
+        cursor.execute("""
+            SELECT 
+                COUNT(*) FILTER (WHERE tag1 IS NOT NULL) as tag1_count,
+                COUNT(*) FILTER (WHERE tag2 IS NOT NULL) as tag2_count,
+                COUNT(*) FILTER (WHERE tag3 IS NOT NULL) as tag3_count,
+                COUNT(*) FILTER (WHERE tag4 IS NOT NULL) as tag4_count
+            FROM silver.journal_lines
+        """)
+        
+        tag_stats = cursor.fetchone()
+        logger.info("Tag usage statistics:")
+        logger.info(f"  Tag1: {tag_stats[0]} lines")
+        logger.info(f"  Tag2: {tag_stats[1]} lines")
+        logger.info(f"  Tag3: {tag_stats[2]} lines")
+        logger.info(f"  Tag4: {tag_stats[3]} lines")
         
         cursor.close()
         return count
